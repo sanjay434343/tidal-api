@@ -8,34 +8,49 @@ app.use(cors());
 
 const BASE_URL = 'https://api.deezer.com';
 
-// 🔍 General Search with Year
+// 🔍 General Search with Year Filter
 app.get('/search', async (req, res) => {
   const query = req.query.q;
+  const yearFilter = req.query.year;
+
   try {
     const { data } = await axios.get(`${BASE_URL}/search?q=${encodeURIComponent(query)}`);
-    const resultsWithYear = data.data.map(item => ({
-      title: item.title,
-      artist: item.artist.name,
-      album: item.album.title,
-      album_cover: item.album.cover_medium,
-      preview_url: item.preview,
-      duration: item.duration,
-      link: item.link,
-      year: item.release_date ? item.release_date.slice(0, 4) : 'Unknown'
+    const resultsWithYear = await Promise.all(data.data.map(async item => {
+      let year = 'Unknown';
+      try {
+        const albumData = await axios.get(`${BASE_URL}/album/${item.album.id}`);
+        year = albumData.data.release_date?.slice(0, 4) || 'Unknown';
+      } catch {}
+      return {
+        title: item.title,
+        artist: item.artist.name,
+        album: item.album.title,
+        album_cover: item.album.cover_medium,
+        preview_url: item.preview,
+        duration: item.duration,
+        link: item.link,
+        year
+      };
     }));
 
+    const filtered = yearFilter
+      ? resultsWithYear.filter(song => song.year === yearFilter)
+      : resultsWithYear;
+
     res.json({
-      total: resultsWithYear.length,
-      results: resultsWithYear
+      total: filtered.length,
+      results: filtered
     });
   } catch (e) {
     res.status(500).json({ error: e.toString() });
   }
 });
 
-// 🎵 Recent Songs by Artist with Year
+// 🎵 Recent Songs by Artist with Year Filter
 app.get('/artist', async (req, res) => {
   const query = req.query.q;
+  const yearFilter = req.query.year;
+
   try {
     const { data } = await axios.get(`${BASE_URL}/search?q=artist:"${encodeURIComponent(query)}"`);
 
@@ -62,19 +77,25 @@ app.get('/artist', async (req, res) => {
       };
     }));
 
+    const filtered = yearFilter
+      ? tracksWithYear.filter(track => track.year === yearFilter)
+      : tracksWithYear;
+
     res.json({
       artist: query,
-      total: tracksWithYear.length,
-      tracks: tracksWithYear
+      total: filtered.length,
+      tracks: filtered
     });
   } catch (err) {
     res.status(500).json({ error: err.toString() });
   }
 });
 
-// 💿 Recent Albums by Artist with Year
+// 💿 Recent Albums by Artist with Year Filter
 app.get('/albums', async (req, res) => {
   const artistName = req.query.q;
+  const yearFilter = req.query.year;
+
   try {
     const searchRes = await axios.get(`${BASE_URL}/search/artist?q=${encodeURIComponent(artistName)}`);
     const artist = searchRes.data.data[0];
@@ -84,7 +105,7 @@ app.get('/albums', async (req, res) => {
     }
 
     const albumsRes = await axios.get(`${BASE_URL}/artist/${artist.id}/albums`);
-    const albums = albumsRes.data.data.slice(0, 10).map(album => ({
+    const albums = albumsRes.data.data.slice(0, 30).map(album => ({
       title: album.title,
       cover: album.cover_medium,
       tracklist: album.tracklist,
@@ -93,9 +114,14 @@ app.get('/albums', async (req, res) => {
       link: album.link
     }));
 
+    const filtered = yearFilter
+      ? albums.filter(album => album.year === yearFilter)
+      : albums;
+
     res.json({
       artist: artist.name,
-      albums
+      total: filtered.length,
+      albums: filtered
     });
   } catch (e) {
     res.status(500).json({ error: e.toString() });
