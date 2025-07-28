@@ -1,62 +1,37 @@
 const express = require('express');
-const cors = require('cors');
 const axios = require('axios');
+const cors = require('cors');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 app.use(cors());
 
 const BASE_URL = 'https://api.deezer.com';
 
-// GET /search?q=Anirudh
+// 🔍 General search
 app.get('/search', async (req, res) => {
   const query = req.query.q;
   try {
     const { data } = await axios.get(`${BASE_URL}/search?q=${encodeURIComponent(query)}`);
-    const tracks = data.data.map(track => ({
-      title: track.title,
-      artist: track.artist.name,
-      album: track.album.title,
-      album_cover: track.album.cover_medium,
-      preview_url: track.preview,
-      duration: track.duration,
-      link: track.link
-    }));
-    res.json(tracks);
-  } catch (err) {
-    res.status(500).json({ error: err.toString() });
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.toString() });
   }
 });
 
-// GET /recent
-app.get('/recent', async (req, res) => {
-  try {
-    const { data } = await axios.get(`${BASE_URL}/chart`);
-    const tracks = data.tracks.data.map(track => ({
-      title: track.title,
-      artist: track.artist.name,
-      album: track.album.title,
-      album_cover: track.album.cover_medium,
-      preview_url: track.preview,
-      duration: track.duration,
-      link: track.link
-    }));
-    res.json(tracks);
-  } catch (err) {
-    res.status(500).json({ error: err.toString() });
-  }
-});
-
-// GET /artist?q=Anirudh
+// 🎵 Recent Songs by Artist (using search)
 app.get('/artist', async (req, res) => {
   const query = req.query.q;
   try {
-    const search = await axios.get(`${BASE_URL}/search/artist?q=${encodeURIComponent(query)}`);
-    const artistId = search.data.data?.[0]?.id;
-    if (!artistId) return res.status(404).json({ error: 'Artist not found' });
+    const { data } = await axios.get(`${BASE_URL}/search?q=artist:"${encodeURIComponent(query)}"`);
 
-    const topTracksRes = await axios.get(`${BASE_URL}/artist/${artistId}/top?limit=10`);
-    const tracks = topTracksRes.data.data.map(track => ({
+    if (!data || !data.data || data.data.length === 0) {
+      return res.status(404).json({ error: 'No songs found for this artist' });
+    }
+
+    const sortedTracks = data.data.slice(0, 20).map(track => ({
       title: track.title,
+      artist: track.artist.name,
       album: track.album.title,
       album_cover: track.album.cover_medium,
       preview_url: track.preview,
@@ -65,13 +40,45 @@ app.get('/artist', async (req, res) => {
     }));
 
     res.json({
-      artist: search.data.data[0].name,
-      picture: search.data.data[0].picture_medium,
-      tracks
+      artist: query,
+      total: sortedTracks.length,
+      tracks: sortedTracks
     });
   } catch (err) {
     res.status(500).json({ error: err.toString() });
   }
 });
 
-app.listen(3000, () => console.log('Server running on port 3000'));
+// 💿 Recent Albums by Artist
+app.get('/albums', async (req, res) => {
+  const artistName = req.query.q;
+  try {
+    const searchRes = await axios.get(`${BASE_URL}/search/artist?q=${encodeURIComponent(artistName)}`);
+    const artist = searchRes.data.data[0];
+
+    if (!artist) {
+      return res.status(404).json({ error: 'Artist not found' });
+    }
+
+    const albumsRes = await axios.get(`${BASE_URL}/artist/${artist.id}/albums`);
+    const albums = albumsRes.data.data.slice(0, 10).map(album => ({
+      title: album.title,
+      cover: album.cover_medium,
+      tracklist: album.tracklist,
+      release_date: album.release_date,
+      link: album.link
+    }));
+
+    res.json({
+      artist: artist.name,
+      albums
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.toString() });
+  }
+});
+
+// 🟢 Start Server
+app.listen(PORT, () => {
+  console.log(`Tidal proxy running on port ${PORT}`);
+});
