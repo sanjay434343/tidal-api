@@ -6,34 +6,17 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 
-const HIFI_BASE = 'https://hifi.401658.xyz';
-
 app.get('/search', async (req, res) => {
-  const q = req.query.q;
-  if (!q) return res.status(400).json({ error: 'Missing q param' });
-  try {
-    const response = await axios.get(`${HIFI_BASE}/search/`, {
-      params: { query: q }
-    });
-    res.json(response.data);
-  } catch (err) {
-    res.status(500).json({ error: err.toString() });
-  }
-});
+  const query = req.query.q;
+  if (!query) return res.status(400).json({ error: "Missing query parameter `q`" });
 
-app.get('/track', async (req, res) => {
-  const id = req.query.id;
-  const quality = req.query.quality || 'LOSSLESS';
-  if (!id) return res.status(400).json({ error: 'Missing id param' });
   try {
-    const response = await axios.get(`${HIFI_BASE}/track/`, {
-      params: { id, quality }
-    });
+    const response = await axios.get(`https://api.deezer.com/search?q=${encodeURIComponent(query)}`);
     res.json(response.data);
-  } catch (err) {
-    res.status(500).json({ error: err.toString() });
+  } catch (error) {
+    res.status(500).json({ error: error.toString() });
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Proxy listening on port ${PORT}`));
+app.listen(PORT, () => console.log(`Proxy running on port ${PORT}`));
