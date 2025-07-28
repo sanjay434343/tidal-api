@@ -7,7 +7,7 @@ app.use(cors());
 
 const BASE_URL = 'https://api.deezer.com';
 
-// Utility: Sort by release_date
+// Sort tracks by release date
 function sortByYear(arr, order = 'desc') {
   return arr.sort((a, b) => {
     const dateA = new Date(a.release_date || '1900-01-01');
@@ -16,7 +16,7 @@ function sortByYear(arr, order = 'desc') {
   });
 }
 
-// 🔍 Search endpoint
+// 🎵 General Search
 app.get('/search', async (req, res) => {
   const query = req.query.q;
   const year = req.query.year;
@@ -50,7 +50,7 @@ app.get('/search', async (req, res) => {
   }
 });
 
-// 🎤 Artist-specific endpoint
+// 👤 Artist Search
 app.get('/artist', async (req, res) => {
   const artistName = req.query.q;
   const year = req.query.year;
@@ -84,7 +84,7 @@ app.get('/artist', async (req, res) => {
   }
 });
 
-// 💿 Album search
+// 💿 Album Search
 app.get('/albums', async (req, res) => {
   const query = req.query.q;
 
@@ -107,13 +107,13 @@ app.get('/albums', async (req, res) => {
   }
 });
 
-// Root route
+// 🏠 Home
 app.get('/', (req, res) => {
-  res.send('🎵 Tidal API Proxy - /search, /artist, /albums');
+  res.send('🎵 Tidal API Proxy — Use /search, /artist, /albums');
 });
 
-// Start server
+// 🚀 Start Server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🎧 Server running on http://localhost:${PORT}`);
+  console.log(`🎧 Server running at http://localhost:${PORT}`);
 });
