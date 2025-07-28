@@ -3,117 +3,82 @@ const axios = require('axios');
 const cors = require('cors');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 app.use(cors());
 
 const BASE_URL = 'https://api.deezer.com';
 
-// Sort tracks by release date
-function sortByYear(arr, order = 'desc') {
-  return arr.sort((a, b) => {
-    const dateA = new Date(a.release_date || '1900-01-01');
-    const dateB = new Date(b.release_date || '1900-01-01');
-    return order === 'asc' ? dateA - dateB : dateB - dateA;
-  });
-}
-
-// 🎵 General Search
+// 🔍 General search
 app.get('/search', async (req, res) => {
   const query = req.query.q;
-  const year = req.query.year;
-  const sort = req.query.sort || 'desc';
-
-  if (!query) return res.status(400).json({ error: 'Missing query param `q`' });
-
   try {
     const { data } = await axios.get(`${BASE_URL}/search?q=${encodeURIComponent(query)}`);
-
-    let results = data.data.map(track => ({
-      title: track.title,
-      artist: track.artist.name,
-      album: track.album.title,
-      album_cover: track.album.cover_medium,
-      preview_url: track.preview,
-      duration: track.duration,
-      release_date: track.release_date || track.album?.release_date || '',
-      link: track.link
-    }));
-
-    if (year) {
-      results = results.filter(t => t.release_date && t.release_date.startsWith(year));
-    }
-
-    results = sortByYear(results, sort);
-
-    res.json({ total: results.length, results });
+    res.json(data);
   } catch (e) {
     res.status(500).json({ error: e.toString() });
   }
 });
 
-// 👤 Artist Search
+// 🎵 Recent Songs by Artist (using search)
 app.get('/artist', async (req, res) => {
-  const artistName = req.query.q;
-  const year = req.query.year;
-  const sort = req.query.sort || 'desc';
-
-  if (!artistName) return res.status(400).json({ error: 'Missing query param `q`' });
-
+  const query = req.query.q;
   try {
-    const { data } = await axios.get(`${BASE_URL}/search?q=artist:"${encodeURIComponent(artistName)}"`);
+    const { data } = await axios.get(`${BASE_URL}/search?q=artist:"${encodeURIComponent(query)}"`);
 
-    let tracks = data.data.map(track => ({
+    if (!data || !data.data || data.data.length === 0) {
+      return res.status(404).json({ error: 'No songs found for this artist' });
+    }
+
+    const sortedTracks = data.data.slice(0, 20).map(track => ({
       title: track.title,
       artist: track.artist.name,
       album: track.album.title,
       album_cover: track.album.cover_medium,
       preview_url: track.preview,
       duration: track.duration,
-      release_date: track.release_date || track.album?.release_date || '',
       link: track.link
     }));
 
-    if (year) {
-      tracks = tracks.filter(t => t.release_date && t.release_date.startsWith(year));
-    }
-
-    tracks = sortByYear(tracks, sort);
-
-    res.json({ artist: artistName, total: tracks.length, tracks });
+    res.json({
+      artist: query,
+      total: sortedTracks.length,
+      tracks: sortedTracks
+    });
   } catch (err) {
     res.status(500).json({ error: err.toString() });
   }
 });
 
-// 💿 Album Search
+// 💿 Recent Albums by Artist
 app.get('/albums', async (req, res) => {
-  const query = req.query.q;
-
-  if (!query) return res.status(400).json({ error: 'Missing query param `q`' });
-
+  const artistName = req.query.q;
   try {
-    const { data } = await axios.get(`${BASE_URL}/search/album?q=${encodeURIComponent(query)}`);
+    const searchRes = await axios.get(`${BASE_URL}/search/artist?q=${encodeURIComponent(artistName)}`);
+    const artist = searchRes.data.data[0];
 
-    const results = data.data.map(album => ({
+    if (!artist) {
+      return res.status(404).json({ error: 'Artist not found' });
+    }
+
+    const albumsRes = await axios.get(`${BASE_URL}/artist/${artist.id}/albums`);
+    const albums = albumsRes.data.data.slice(0, 10).map(album => ({
       title: album.title,
-      id: album.id,
       cover: album.cover_medium,
-      artist: album.artist.name,
+      tracklist: album.tracklist,
+      release_date: album.release_date,
       link: album.link
     }));
 
-    res.json({ total: results.length, results });
-  } catch (err) {
-    res.status(500).json({ error: err.toString() });
+    res.json({
+      artist: artist.name,
+      albums
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.toString() });
   }
 });
 
-// 🏠 Home
-app.get('/', (req, res) => {
-  res.send('🎵 Tidal API Proxy — Use /search, /artist, /albums');
-});
-
-// 🚀 Start Server
-const PORT = process.env.PORT || 3000;
+// 🟢 Start Server
 app.listen(PORT, () => {
-  console.log(`🎧 Server running at http://localhost:${PORT}`);
+  console.log(`Tidal proxy running on port ${PORT}`);
 });
