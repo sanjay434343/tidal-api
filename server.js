@@ -3,57 +3,60 @@ const axios = require('axios');
 const cors = require('cors');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 app.use(cors());
 
 const BASE_URL = 'https://api.deezer.com';
 
-// Utility: Sort by year
-function sortByYear(tracks, order = 'desc') {
-  return tracks.sort((a, b) => {
-    const yearA = parseInt(a.release_date?.substring(0, 4)) || 0;
-    const yearB = parseInt(b.release_date?.substring(0, 4)) || 0;
-    return order === 'asc' ? yearA - yearB : yearB - yearA;
+// Utility: Sort by release_date
+function sortByYear(arr, order = 'desc') {
+  return arr.sort((a, b) => {
+    const dateA = new Date(a.release_date || '1900-01-01');
+    const dateB = new Date(b.release_date || '1900-01-01');
+    return order === 'asc' ? dateA - dateB : dateB - dateA;
   });
 }
 
-// 🔍 General search with year and sort
+// 🔍 Search endpoint
 app.get('/search', async (req, res) => {
   const query = req.query.q;
   const year = req.query.year;
   const sort = req.query.sort || 'desc';
 
+  if (!query) return res.status(400).json({ error: 'Missing query param `q`' });
+
   try {
     const { data } = await axios.get(`${BASE_URL}/search?q=${encodeURIComponent(query)}`);
 
-    let filtered = data.data.map(track => ({
+    let results = data.data.map(track => ({
       title: track.title,
       artist: track.artist.name,
       album: track.album.title,
       album_cover: track.album.cover_medium,
       preview_url: track.preview,
       duration: track.duration,
-      release_date: track.release_date || '',
+      release_date: track.release_date || track.album?.release_date || '',
       link: track.link
     }));
 
     if (year) {
-      filtered = filtered.filter(t => t.release_date?.startsWith(year));
+      results = results.filter(t => t.release_date && t.release_date.startsWith(year));
     }
 
-    filtered = sortByYear(filtered, sort);
+    results = sortByYear(results, sort);
 
-    res.json({ total: filtered.length, results: filtered });
+    res.json({ total: results.length, results });
   } catch (e) {
     res.status(500).json({ error: e.toString() });
   }
 });
 
-// 🎵 Songs by Artist (with year + sort)
+// 🎤 Artist-specific endpoint
 app.get('/artist', async (req, res) => {
   const artistName = req.query.q;
   const year = req.query.year;
   const sort = req.query.sort || 'desc';
+
+  if (!artistName) return res.status(400).json({ error: 'Missing query param `q`' });
 
   try {
     const { data } = await axios.get(`${BASE_URL}/search?q=artist:"${encodeURIComponent(artistName)}"`);
@@ -65,12 +68,12 @@ app.get('/artist', async (req, res) => {
       album_cover: track.album.cover_medium,
       preview_url: track.preview,
       duration: track.duration,
-      release_date: track.release_date || '',
+      release_date: track.release_date || track.album?.release_date || '',
       link: track.link
     }));
 
     if (year) {
-      tracks = tracks.filter(t => t.release_date?.startsWith(year));
+      tracks = tracks.filter(t => t.release_date && t.release_date.startsWith(year));
     }
 
     tracks = sortByYear(tracks, sort);
@@ -81,39 +84,36 @@ app.get('/artist', async (req, res) => {
   }
 });
 
-// 💿 Albums by Artist (with year + sort)
+// 💿 Album search
 app.get('/albums', async (req, res) => {
-  const artistName = req.query.q;
-  const year = req.query.year;
-  const sort = req.query.sort || 'desc';
+  const query = req.query.q;
+
+  if (!query) return res.status(400).json({ error: 'Missing query param `q`' });
 
   try {
-    const searchRes = await axios.get(`${BASE_URL}/search/artist?q=${encodeURIComponent(artistName)}`);
-    const artist = searchRes.data.data[0];
-    if (!artist) return res.status(404).json({ error: 'Artist not found' });
+    const { data } = await axios.get(`${BASE_URL}/search/album?q=${encodeURIComponent(query)}`);
 
-    const albumsRes = await axios.get(`${BASE_URL}/artist/${artist.id}/albums`);
-    let albums = albumsRes.data.data.map(album => ({
+    const results = data.data.map(album => ({
       title: album.title,
+      id: album.id,
       cover: album.cover_medium,
-      release_date: album.release_date,
-      tracklist: album.tracklist,
+      artist: album.artist.name,
       link: album.link
     }));
 
-    if (year) {
-      albums = albums.filter(a => a.release_date?.startsWith(year));
-    }
-
-    albums = sortByYear(albums, sort);
-
-    res.json({ artist: artist.name, total: albums.length, albums });
-  } catch (e) {
-    res.status(500).json({ error: e.toString() });
+    res.json({ total: results.length, results });
+  } catch (err) {
+    res.status(500).json({ error: err.toString() });
   }
 });
 
-// 🟢 Start
+// Root route
+app.get('/', (req, res) => {
+  res.send('🎵 Tidal API Proxy - /search, /artist, /albums');
+});
+
+// Start server
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`🎧 Server running on http://localhost:${PORT}`);
 });
