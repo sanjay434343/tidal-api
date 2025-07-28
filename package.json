@@ -1,0 +1,14 @@
+{
+  "name": "tidal-proxy-api",
+  "version": "1.0.0",
+  "description": "A TIDAL proxy API for use with Flutter apps (deployed on Render)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "tidal-api-wrapper": "^1.3.2"
+  }
+}
